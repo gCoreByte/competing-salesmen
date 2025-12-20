@@ -140,18 +140,18 @@ const runAlgorithm = () => {
 
 <template>
   <main>
+    <div class="mb-4 flex gap-2 items-end">
+      <label class="input">
+        <span class="label">Number of nodes</span>
+        <input v-model.number="nodeCount" type="number" min="1" max="5000" />
+      </label>
+      <button class="btn btn-primary" @click="generateRandomGraph">
+        Generate random graph with N nodes
+      </button>
+      <button class="btn btn-error" @click="clearGraph">Clear graph</button>
+    </div>
     <div class="grid grid-cols-12 gap-4">
       <div class="col-span-8">
-        <div class="mb-4 flex gap-2 items-end">
-          <label class="input">
-            <span class="label">Number of nodes</span>
-            <input v-model.number="nodeCount" type="number" min="1" max="5000" />
-          </label>
-          <button class="btn btn-primary" @click="generateRandomGraph">
-            Generate random graph with N nodes
-          </button>
-          <button class="btn btn-error" @click="clearGraph">Clear graph</button>
-        </div>
         <NodeCanvas
           ref="nodeCanvasRef"
           :graph="graph"

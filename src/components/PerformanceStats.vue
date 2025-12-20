@@ -58,11 +58,11 @@ const onAlgorithmChange = (event: Event) => {
           <tbody>
             <tr>
               <td class="font-bold">Best distance</td>
-              <td>{{ bestDistance || 'N/A' }}</td>
+              <td>{{ bestDistance?.toFixed(4) || 'N/A' }}</td>
             </tr>
             <tr>
               <td class="font-bold">Runtime</td>
-              <td>{{ runtime || 'N/A' }} ms</td>
+              <td>{{ runtime?.toFixed(1) || 'N/A' }} ms</td>
             </tr>
             <tr>
               <td class="font-bold">Reads</td>

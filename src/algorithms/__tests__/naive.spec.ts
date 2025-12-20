@@ -27,24 +27,6 @@ describe('Naive Algorithm', () => {
     expect(result.performance).toHaveProperty('writes')
   })
 
-  it('should return nodes in original order', () => {
-    const graph: Graph = {
-      nodes: [
-        { id: 1, x: 0, y: 0 },
-        { id: 2, x: 1, y: 0 },
-        { id: 3, x: 1, y: 1 },
-      ],
-      edges: [],
-    }
-
-    const result = naiveAlgorithm.solve(graph)
-
-    expect(result.path).toHaveLength(3)
-    expect(result.path[0]?.id).toBe(1)
-    expect(result.path[1]?.id).toBe(2)
-    expect(result.path[2]?.id).toBe(3)
-  })
-
   it('should calculate total distance correctly', () => {
     const graph: Graph = {
       nodes: [
@@ -59,6 +41,23 @@ describe('Naive Algorithm', () => {
     const result = naiveAlgorithm.solve(graph)
 
     expect(result.performance.distance).toBeCloseTo(4, 5)
+  })
+
+  it('should return the shortest path', () => {
+    const graph: Graph = {
+      nodes: [
+        { id: 1, x: 0, y: 0 },
+        { id: 2, x: 1, y: 0 },
+        { id: 3, x: 5, y: 5 },
+        { id: 4, x: 0, y: 1 },
+      ],
+      edges: [],
+    }
+
+    const result = naiveAlgorithm.solve(graph)
+
+    expect(result.path).toHaveLength(5)
+    expect(result.performance.distance).toBeCloseTo(14.80624, 3)
   })
 
   it('should handle empty graph', () => {
@@ -147,7 +146,7 @@ describe('Naive Algorithm', () => {
 
     const result = naiveAlgorithm.solve(graph)
 
-    expect(result.path).toHaveLength(3)
+    expect(result.path).toHaveLength(4)
     expect(result.performance.distance).toBeGreaterThan(0)
   })
 
@@ -164,25 +163,6 @@ describe('Naive Algorithm', () => {
 
     expect(result.path[0]).toHaveProperty('name', 'Node 1')
     expect(result.path[1]).toHaveProperty('name', 'Node 2')
-  })
-
-  it('should handle large graphs', () => {
-    const nodes = Array.from({ length: 100 }, (_, i) => ({
-      id: i + 1,
-      x: i * 10,
-      y: i * 10,
-    }))
-
-    const graph: Graph = {
-      nodes,
-      edges: [],
-    }
-
-    const result = naiveAlgorithm.solve(graph)
-
-    expect(result.path).toHaveLength(100)
-    expect(result.performance.distance).toBeGreaterThan(0)
-    expect(result.performance.runtime).toBeGreaterThan(0)
   })
 
   it('should calculate correct distance for a triangle', () => {

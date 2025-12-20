@@ -14,7 +14,7 @@ describe('Naive Algorithm', () => {
         { id: 1, x: 0, y: 0 },
         { id: 2, x: 1, y: 0 },
       ],
-      edges: [{ from: 1, to: 2 }],
+      edges: [],
     }
 
     const result = naiveAlgorithm.solve(graph)

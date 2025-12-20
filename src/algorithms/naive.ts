@@ -11,10 +11,11 @@ const naiveAlgorithm: Algorithm = {
     const nodes = trackedNodes.array
 
     let totalDistance = 0
-    if (nodes.length > 0) {
-      for (let i = 0; i < nodes.length; i++) {
+    const nodesLength = nodes.length
+    if (nodesLength > 0) {
+      for (let i = 0; i < nodesLength; i++) {
         const current = nodes[i]
-        const next = nodes[(i + 1) % nodes.length]
+        const next = nodes[(i + 1) % nodesLength]
 
         if (current && next) {
           // Calculate Euclidean distance

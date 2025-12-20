@@ -12,6 +12,7 @@ const { bestDistance, runtime, reads, writes } = defineProps<{
 
 const emit = defineEmits<{
   'algorithm-selected': [algorithm: Algorithm]
+  'run-algorithm': []
 }>()
 
 const algorithmNames = ref<string[]>([])
@@ -44,28 +45,39 @@ const onAlgorithmChange = (event: Event) => {
   <div class="card card-border border-2 border-base-300">
     <div class="card-body">
       <h2 class="card-title text-lg font-bold mb-2">Algorithm performance stats</h2>
-      <div class="form-control w-full mb-4">
-        <label class="label">
-          <span class="label-text font-bold">Algorithm:</span>
-        </label>
-        <select
-          v-if="algorithmNames.length > 0"
-          v-model="selectedAlgorithmName"
-          class="select select-bordered w-full"
-          @change="onAlgorithmChange"
-        >
+      <label class="select">
+        <span class="label">Algorithm</span>
+        <select v-model="selectedAlgorithmName" @change="onAlgorithmChange">
           <option v-for="name in algorithmNames" :key="name" :value="name">
             {{ name }}
           </option>
         </select>
-        <p v-else class="text-sm text-gray-500">No algorithms available</p>
+      </label>
+      <div class="overflow-x-auto">
+        <table class="table table-zebra w-full border-2 border-base-300">
+          <tbody>
+            <tr>
+              <td class="font-bold">Best distance</td>
+              <td>{{ bestDistance || 'N/A' }}</td>
+            </tr>
+            <tr>
+              <td class="font-bold">Runtime</td>
+              <td>{{ runtime || 'N/A' }} ms</td>
+            </tr>
+            <tr>
+              <td class="font-bold">Reads</td>
+              <td>{{ reads || 'N/A' }}</td>
+            </tr>
+            <tr>
+              <td class="font-bold">Writes</td>
+              <td>{{ writes || 'N/A' }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <p class="card-text">
-        <span class="font-bold">Best distance:</span> {{ bestDistance || 'N/A' }}
-      </p>
-      <p class="card-text"><span class="font-bold">Runtime:</span> {{ runtime || 'N/A' }} ms</p>
-      <p class="card-text"><span class="font-bold">Reads:</span> {{ reads || 'N/A' }}</p>
-      <p class="card-text"><span class="font-bold">Writes:</span> {{ writes || 'N/A' }}</p>
+      <div class="card-actions justify-center mt-4">
+        <button class="btn btn-primary" @click="emit('run-algorithm')">Run Algorithm</button>
+      </div>
     </div>
   </div>
 </template>

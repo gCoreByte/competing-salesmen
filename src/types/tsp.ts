@@ -1,13 +1,14 @@
 export interface Node {
-  id: string | number
+  id: number
   x: number
   y: number
   [key: string]: unknown
 }
 
 export interface Edge {
-  from: string | number
-  to: string | number
+  id: number
+  from: Node
+  to: Node
   weight?: number
   [key: string]: unknown
 }

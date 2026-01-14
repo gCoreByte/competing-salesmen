@@ -2,6 +2,7 @@ import naive from './naive'
 import kopt from './kopt'
 import nearestNeighbour from './nearest-neighbour'
 import genetic from './genetic'
+import antColony from './ant-colony'
 import type { Algorithm } from '../types/tsp'
 
 // algorithm registry
@@ -10,6 +11,7 @@ const algorithms: Record<string, Algorithm> = {
   kopt,
   nearestNeighbour,
   genetic,
+  antColony,
 }
 
 export const getAlgorithmNames = (): string[] => {

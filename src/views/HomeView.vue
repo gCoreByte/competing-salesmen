@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import NodeCanvas from '../components/NodeCanvas.vue'
 import PerformanceStats from '../components/PerformanceStats.vue'
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import type { Algorithm, AlgorithmConfig, Edge, Graph, Node } from '../types/tsp'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import type { AlgorithmConfig, Edge, Graph, Node } from '../types/tsp'
+import { algorithmRunner, AlgorithmRunnerError } from '../services/algorithmRunner'
 
-const selectedAlgorithm = ref<Algorithm | null>(null)
+const selectedAlgorithmName = ref<string>('')
 const algorithmConfig = ref<AlgorithmConfig>({})
+const timeout = ref<number>(30000)
 const bestDistance = ref<number | undefined>(undefined)
 const runtime = ref<number | undefined>(undefined)
 const reads = ref<number | undefined>(undefined)
 const writes = ref<number | undefined>(undefined)
+
+const isRunning = computed(() => algorithmRunner.state.value.isRunning)
+const runnerError = computed(() => algorithmRunner.state.value.error)
 
 const graph = ref<Graph>({
   nodes: [],
@@ -53,6 +58,10 @@ onUnmounted(() => {
   if (resizeObserver) {
     resizeObserver.disconnect()
   }
+  // Cancel any running algorithm when component unmounts
+  if (algorithmRunner.state.value.isRunning) {
+    algorithmRunner.cancel()
+  }
 })
 
 const resetPerformanceStats = () => {
@@ -60,6 +69,7 @@ const resetPerformanceStats = () => {
   runtime.value = undefined
   reads.value = undefined
   writes.value = undefined
+  algorithmRunner.clearError()
 }
 
 const generateRandomGraph = () => {
@@ -85,12 +95,16 @@ const clearGraph = () => {
   resetPerformanceStats()
 }
 
-const onAlgorithmSelected = (algorithm: Algorithm) => {
-  selectedAlgorithm.value = algorithm
+const onAlgorithmSelected = (key: string, _algorithm: { name: string }) => {
+  selectedAlgorithmName.value = key
 }
 
 const onConfigChanged = (config: AlgorithmConfig) => {
   algorithmConfig.value = config
+}
+
+const onTimeoutChanged = (timeoutMs: number) => {
+  timeout.value = timeoutMs
 }
 
 const handleAddNode = (node: Node) => {
@@ -120,26 +134,53 @@ const handleDeleteNode = (nodeId: number) => {
   )
 }
 
-const runAlgorithm = () => {
-  if (!selectedAlgorithm.value) {
+const runAlgorithm = async () => {
+  if (!selectedAlgorithmName.value) {
     return
   }
 
-  const result = selectedAlgorithm.value.solve(graph.value, algorithmConfig.value)
+  algorithmRunner.clearError()
 
-  bestDistance.value = result.performance.distance
-  runtime.value = result.performance.runtime
-  reads.value = result.performance.reads
-  writes.value = result.performance.writes
-  const edges: Edge[] = []
-  for (let i = 0; i < result.path.length; i++) {
-    const current = result.path[i]
-    const next = result.path[i + 1]
-    if (current && next) {
-      edges.push({ id: i, from: current, to: next })
+  try {
+    const result = await algorithmRunner.run(
+      selectedAlgorithmName.value,
+      graph.value,
+      algorithmConfig.value,
+      { timeout: timeout.value > 0 ? timeout.value : undefined },
+    )
+
+    bestDistance.value = result.performance.distance
+    runtime.value = result.performance.runtime
+    reads.value = result.performance.reads
+    writes.value = result.performance.writes
+
+    const edges: Edge[] = []
+    for (let i = 0; i < result.path.length; i++) {
+      const current = result.path[i]
+      const next = result.path[i + 1]
+      if (current && next) {
+        edges.push({ id: i, from: current, to: next })
+      }
     }
+    graph.value.edges = edges
+  } catch (err) {
+    if (err instanceof AlgorithmRunnerError) {
+      if (err.code === 'CANCELLED') {
+        // User cancelled, no need to show error
+        return
+      }
+      // Error is already set in the runner state
+    }
+    // Reset stats on error
+    bestDistance.value = undefined
+    runtime.value = undefined
+    reads.value = undefined
+    writes.value = undefined
   }
-  graph.value.edges = edges
+}
+
+const cancelAlgorithm = () => {
+  algorithmRunner.cancel()
 }
 </script>
 
@@ -148,12 +189,20 @@ const runAlgorithm = () => {
     <div class="mb-4 flex gap-2 items-end">
       <label class="input">
         <span class="label">Number of nodes</span>
-        <input v-model.number="nodeCount" type="number" min="1" max="5000" />
+        <input
+          v-model.number="nodeCount"
+          type="number"
+          min="1"
+          max="5000"
+          :disabled="isRunning"
+        />
       </label>
-      <button class="btn btn-primary" @click="generateRandomGraph">
+      <button class="btn btn-primary" :disabled="isRunning" @click="generateRandomGraph">
         Generate random graph with N nodes
       </button>
-      <button class="btn btn-error" @click="clearGraph">Clear graph</button>
+      <button class="btn btn-error" :disabled="isRunning" @click="clearGraph">
+        Clear graph
+      </button>
     </div>
     <div class="grid grid-cols-12 gap-4">
       <div class="col-span-8">
@@ -171,9 +220,13 @@ const runAlgorithm = () => {
           :runtime="runtime"
           :reads="reads"
           :writes="writes"
+          :is-running="isRunning"
+          :error="runnerError"
           @algorithm-selected="onAlgorithmSelected"
           @config-changed="onConfigChanged"
+          @timeout-changed="onTimeoutChanged"
           @run-algorithm="runAlgorithm"
+          @cancel-algorithm="cancelAlgorithm"
         />
       </div>
     </div>

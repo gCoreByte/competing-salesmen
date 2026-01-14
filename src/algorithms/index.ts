@@ -3,6 +3,7 @@ import kopt from './kopt'
 import nearestNeighbour from './nearest-neighbour'
 import genetic from './genetic'
 import antColony from './ant-colony'
+import simulatedAnnealing from './simulated-annealing'
 import type { Algorithm } from '../types/tsp'
 
 // algorithm registry
@@ -12,6 +13,7 @@ const algorithms: Record<string, Algorithm> = {
   nearestNeighbour,
   genetic,
   antColony,
+  simulatedAnnealing,
 }
 
 export const getAlgorithmNames = (): string[] => {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { getAlgorithmNames, getAlgorithm } from '../algorithms'
-import type { Algorithm } from '../types/tsp'
+import type { Algorithm, AlgorithmConfig } from '../types/tsp'
 
 const { bestDistance, runtime, reads, writes } = defineProps<{
   bestDistance?: number
@@ -12,11 +12,31 @@ const { bestDistance, runtime, reads, writes } = defineProps<{
 
 const emit = defineEmits<{
   'algorithm-selected': [algorithm: Algorithm]
+  'config-changed': [config: AlgorithmConfig]
   'run-algorithm': []
 }>()
 
 const algorithmNames = ref<string[]>([])
 const selectedAlgorithmName = ref<string>('')
+const algorithmConfig = ref<AlgorithmConfig>({})
+
+const selectedAlgorithm = computed(() => {
+  return getAlgorithm(selectedAlgorithmName.value)
+})
+
+const initializeConfig = (algorithm: Algorithm | undefined) => {
+  if (!algorithm?.configOptions) {
+    algorithmConfig.value = {}
+    return
+  }
+
+  const newConfig: AlgorithmConfig = {}
+  for (const option of algorithm.configOptions) {
+    newConfig[option.key] = option.default
+  }
+  algorithmConfig.value = newConfig
+  emit('config-changed', algorithmConfig.value)
+}
 
 onMounted(() => {
   algorithmNames.value = getAlgorithmNames()
@@ -27,9 +47,14 @@ onMounted(() => {
       const algorithm = getAlgorithm(firstAlgorithm)
       if (algorithm) {
         emit('algorithm-selected', algorithm)
+        initializeConfig(algorithm)
       }
     }
   }
+})
+
+watch(selectedAlgorithm, (newAlgorithm) => {
+  initializeConfig(newAlgorithm)
 })
 
 const onAlgorithmChange = (event: Event) => {
@@ -39,6 +64,11 @@ const onAlgorithmChange = (event: Event) => {
   if (algorithm) {
     emit('algorithm-selected', algorithm)
   }
+}
+
+const onConfigChange = (key: string, value: number | string) => {
+  algorithmConfig.value[key] = value
+  emit('config-changed', algorithmConfig.value)
 }
 </script>
 <template>
@@ -53,6 +83,31 @@ const onAlgorithmChange = (event: Event) => {
           </option>
         </select>
       </label>
+      <template v-if="selectedAlgorithm?.configOptions">
+        <div v-for="option in selectedAlgorithm.configOptions" :key="option.key" class="mt-2">
+          <label v-if="option.type === 'number'" class="input">
+            <span class="label">{{ option.label }}</span>
+            <input
+              type="number"
+              :value="algorithmConfig[option.key]"
+              :min="option.min"
+              :max="option.max"
+              @input="onConfigChange(option.key, Number(($event.target as HTMLInputElement).value))"
+            />
+          </label>
+          <label v-else-if="option.type === 'select'" class="select">
+            <span class="label">{{ option.label }}</span>
+            <select
+              :value="algorithmConfig[option.key]"
+              @change="onConfigChange(option.key, ($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="opt in option.options" :key="String(opt.value)" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </label>
+        </div>
+      </template>
       <div class="overflow-x-auto">
         <table class="table table-zebra w-full border-2 border-base-300">
           <tbody>

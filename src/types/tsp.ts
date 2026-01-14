@@ -30,7 +30,22 @@ export interface Result {
   performance: Performance
 }
 
+export interface AlgorithmConfig {
+  [key: string]: unknown
+}
+
+export interface ConfigOption {
+  key: string
+  label: string
+  type: 'number' | 'select'
+  default: number | string
+  min?: number
+  max?: number
+  options?: { value: string | number; label: string }[]
+}
+
 export interface Algorithm {
   name: string
-  solve: (graph: Graph) => Result
+  configOptions?: ConfigOption[]
+  solve: (graph: Graph, config?: AlgorithmConfig) => Result
 }

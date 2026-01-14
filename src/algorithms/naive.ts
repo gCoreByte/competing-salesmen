@@ -18,7 +18,7 @@ function permute<T>(arr: T[]): T[][] {
 
 const naiveAlgorithm: Algorithm = {
   name: 'Naive',
-  solve: (graph: Graph): Result => {
+  solve: (graph: Graph, _config?): Result => {
     const startTime = performance.now()
 
     const trackedNodes = new TrackedArray(graph.nodes)

@@ -2,9 +2,10 @@
 import NodeCanvas from '../components/NodeCanvas.vue'
 import PerformanceStats from '../components/PerformanceStats.vue'
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import type { Algorithm, Edge, Graph, Node } from '../types/tsp'
+import type { Algorithm, AlgorithmConfig, Edge, Graph, Node } from '../types/tsp'
 
 const selectedAlgorithm = ref<Algorithm | null>(null)
+const algorithmConfig = ref<AlgorithmConfig>({})
 const bestDistance = ref<number | undefined>(undefined)
 const runtime = ref<number | undefined>(undefined)
 const reads = ref<number | undefined>(undefined)
@@ -88,6 +89,10 @@ const onAlgorithmSelected = (algorithm: Algorithm) => {
   selectedAlgorithm.value = algorithm
 }
 
+const onConfigChanged = (config: AlgorithmConfig) => {
+  algorithmConfig.value = config
+}
+
 const handleAddNode = (node: Node) => {
   graph.value.nodes.push(node)
 }
@@ -120,7 +125,7 @@ const runAlgorithm = () => {
     return
   }
 
-  const result = selectedAlgorithm.value.solve(graph.value)
+  const result = selectedAlgorithm.value.solve(graph.value, algorithmConfig.value)
 
   bestDistance.value = result.performance.distance
   runtime.value = result.performance.runtime
@@ -167,6 +172,7 @@ const runAlgorithm = () => {
           :reads="reads"
           :writes="writes"
           @algorithm-selected="onAlgorithmSelected"
+          @config-changed="onConfigChanged"
           @run-algorithm="runAlgorithm"
         />
       </div>

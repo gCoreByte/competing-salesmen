@@ -49,3 +49,13 @@ export interface Algorithm {
   configOptions?: ConfigOption[]
   solve: (graph: Graph, config?: AlgorithmConfig) => Result
 }
+
+export interface RunOptions {
+  timeout?: number // timeout in milliseconds, 0 or undefined means no timeout
+}
+
+export interface RunnerState {
+  isRunning: boolean
+  canCancel: boolean
+  error: string | null
+}

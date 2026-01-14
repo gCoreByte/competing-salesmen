@@ -1,11 +1,12 @@
 import type { Algorithm, AlgorithmConfig, Graph, Node, Performance, Result } from '../types/tsp'
-import { TrackedArray } from '../utils/tracked'
-import { nearestNeighborTour, tourDistance } from './utils'
+import { type OperationCounter, nearestNeighborTour, tourDistance } from './utils'
 
 /**
  * 2-opt improvement: reverse segment between positions i and j
  */
-function twoOptSwap(tour: Node[], i: number, j: number): Node[] {
+function twoOptSwap(tour: Node[], i: number, j: number, counter: OperationCounter): Node[] {
+  counter.reads += tour.length
+  counter.writes += tour.length
   const newTour = tour.slice(0, i)
   for (let k = j; k >= i; k--) {
     newTour.push(tour[k]!)
@@ -16,12 +17,14 @@ function twoOptSwap(tour: Node[], i: number, j: number): Node[] {
   return newTour
 }
 
-function optimize2Opt(tour: Node[]): Node[] {
+function optimize2Opt(tour: Node[], counter: OperationCounter): Node[] {
   if (tour.length < 4) return tour
 
   let improved = true
+  counter.reads += tour.length
+  counter.writes += tour.length
   let currentTour = [...tour]
-  let bestDistance = tourDistance(currentTour)
+  let bestDistance = tourDistance(currentTour, counter)
 
   while (improved) {
     improved = false
@@ -30,8 +33,8 @@ function optimize2Opt(tour: Node[]): Node[] {
       for (let j = i + 2; j < currentTour.length; j++) {
         if (j === i + 1) continue
 
-        const newTour = twoOptSwap(currentTour, i + 1, j)
-        const newDistance = tourDistance(newTour)
+        const newTour = twoOptSwap(currentTour, i + 1, j, counter)
+        const newDistance = tourDistance(newTour, counter)
 
         if (newDistance < bestDistance - 1e-10) {
           currentTour = newTour
@@ -49,12 +52,14 @@ function optimize2Opt(tour: Node[]): Node[] {
  * Apply 3-opt optimization until no improvement found
  * 3-opt removes 3 edges and reconnects in all possible ways
  */
-function optimize3Opt(tour: Node[]): Node[] {
-  if (tour.length < 6) return optimize2Opt(tour)
+function optimize3Opt(tour: Node[], counter: OperationCounter): Node[] {
+  if (tour.length < 6) return optimize2Opt(tour, counter)
 
   let improved = true
+  counter.reads += tour.length
+  counter.writes += tour.length
   let currentTour = [...tour]
-  let bestDistance = tourDistance(currentTour)
+  let bestDistance = tourDistance(currentTour, counter)
 
   while (improved) {
     improved = false
@@ -62,10 +67,10 @@ function optimize3Opt(tour: Node[]): Node[] {
     for (let i = 0; i < currentTour.length - 4; i++) {
       for (let j = i + 2; j < currentTour.length - 2; j++) {
         for (let k = j + 2; k < currentTour.length; k++) {
-          const candidates = generate3OptCandidates(currentTour, i, j, k)
+          const candidates = generate3OptCandidates(currentTour, i, j, k, counter)
 
           for (const candidate of candidates) {
-            const newDistance = tourDistance(candidate)
+            const newDistance = tourDistance(candidate, counter)
             if (newDistance < bestDistance - 1e-10) {
               currentTour = candidate
               bestDistance = newDistance
@@ -83,17 +88,24 @@ function optimize3Opt(tour: Node[]): Node[] {
 /**
  * Generate all valid 3-opt reconnections for given break points
  */
-function generate3OptCandidates(tour: Node[], i: number, j: number, k: number): Node[][] {
+function generate3OptCandidates(
+  tour: Node[],
+  i: number,
+  j: number,
+  k: number,
+  counter: OperationCounter,
+): Node[][] {
   const candidates: Node[][] = []
   const n = tour.length
 
-  // Segments: A = [0..i], B = [i+1..j], C = [j+1..k], D = [k+1..n-1]
+  counter.reads += n * 7 // Reading tour for all 7 candidates
+  counter.writes += n * 7 // Writing 7 new candidate tours
+
   const A = tour.slice(0, i + 1)
   const B = tour.slice(i + 1, j + 1)
   const C = tour.slice(j + 1, k + 1)
   const D = tour.slice(k + 1, n)
 
-  // 3-opt has 8 possible reconnections, but we skip the original
   candidates.push([...A, ...B.slice().reverse(), ...C, ...D])
   candidates.push([...A, ...B, ...C.slice().reverse(), ...D])
   candidates.push([...A, ...B.slice().reverse(), ...C.slice().reverse(), ...D])
@@ -109,14 +121,13 @@ function generate3OptCandidates(tour: Node[], i: number, j: number, k: number): 
  * Apply general k-opt optimization (for k > 3)
  * Uses iterative improvement with random segment selection
  */
-function optimizeKOpt(tour: Node[], k: number): Node[] {
+function optimizeKOpt(tour: Node[], k: number, counter: OperationCounter): Node[] {
   if (tour.length < 2 * k) {
-    // Fall back to 3-opt if tour too small for k-opt
-    return optimize3Opt(tour)
+    return optimize3Opt(tour, counter)
   }
 
-  let currentTour = optimize3Opt(tour)
-  let bestDistance = tourDistance(currentTour)
+  let currentTour = optimize3Opt(tour, counter)
+  let bestDistance = tourDistance(currentTour, counter)
 
   const positions = generateKOptPositions(currentTour.length, k)
   let improved = true
@@ -125,10 +136,10 @@ function optimizeKOpt(tour: Node[], k: number): Node[] {
     improved = false
 
     for (const pos of positions) {
-      const candidates = generateKOptCandidates(currentTour, pos)
+      const candidates = generateKOptCandidates(currentTour, pos, counter)
 
       for (const candidate of candidates) {
-        const newDistance = tourDistance(candidate)
+        const newDistance = tourDistance(candidate, counter)
         if (newDistance < bestDistance - 1e-10) {
           currentTour = candidate
           bestDistance = newDistance
@@ -184,13 +195,17 @@ function generateKOptPositions(n: number, k: number): number[][] {
 /**
  * Generate k-opt candidates for given positions
  */
-function generateKOptCandidates(tour: Node[], positions: number[]): Node[][] {
+function generateKOptCandidates(
+  tour: Node[],
+  positions: number[],
+  counter: OperationCounter,
+): Node[][] {
   const candidates: Node[][] = []
-  const k = positions.length
 
   const segments: Node[][] = []
   let prevPos = 0
 
+  counter.reads += tour.length
   for (const pos of positions) {
     segments.push(tour.slice(prevPos, pos + 1))
     prevPos = pos + 1
@@ -203,6 +218,7 @@ function generateKOptCandidates(tour: Node[], positions: number[]): Node[][] {
   const permutations = generateSegmentPermutations(middleSegments)
 
   for (const perm of permutations) {
+    counter.writes += tour.length
     const newTour = [
       ...segments[0]!,
       ...perm.flat(),
@@ -256,7 +272,6 @@ function generateSegmentPermutations(segments: Node[][]): Node[][][] {
 
   permute(indices, 0)
 
-  // Limit results for performance
   if (results.length > 100) {
     return results.slice(0, 100)
   }
@@ -279,9 +294,9 @@ const koptAlgorithm: Algorithm = {
   solve: (graph: Graph, config?: AlgorithmConfig): Result => {
     const startTime = performance.now()
 
-    const trackedNodes = new TrackedArray(graph.nodes)
-    const nodes = trackedNodes.array
+    const nodes = graph.nodes
     const n = nodes.length
+    const counter: OperationCounter = { reads: 0, writes: 0 }
 
     if (n === 0) {
       return {
@@ -296,40 +311,43 @@ const koptAlgorithm: Algorithm = {
     }
 
     if (n === 1) {
+      counter.reads += 1
       return {
         path: [nodes[0]!],
         performance: {
           distance: 0,
           runtime: performance.now() - startTime,
-          reads: trackedNodes.reads,
-          writes: trackedNodes.writes,
+          reads: counter.reads,
+          writes: counter.writes,
         },
       }
     }
 
     const k = (config?.k as number) ?? 2
 
-    let tour = nearestNeighborTour(nodes)
+    let tour = nearestNeighborTour(nodes, counter)
 
     if (k === 2) {
-      tour = optimize2Opt(tour)
+      tour = optimize2Opt(tour, counter)
     } else if (k === 3) {
-      tour = optimize3Opt(tour)
+      tour = optimize3Opt(tour, counter)
     } else {
-      tour = optimizeKOpt(tour, k)
+      tour = optimizeKOpt(tour, k, counter)
     }
 
-    const finalDistance = tourDistance(tour)
+    const finalDistance = tourDistance(tour, counter)
     const endTime = performance.now()
     const runtime = endTime - startTime
 
+    counter.reads += tour.length
+    counter.writes += tour.length + 1
     const displayPath = [...tour, tour[0]!]
 
     const performanceMetrics: Performance = {
       distance: finalDistance,
       runtime,
-      reads: trackedNodes.reads,
-      writes: trackedNodes.writes,
+      reads: counter.reads,
+      writes: counter.writes,
     }
 
     return {

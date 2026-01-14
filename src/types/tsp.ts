@@ -30,6 +30,14 @@ export interface Result {
   performance: Performance
 }
 
+export interface LeaderboardEntry {
+  id: number
+  algorithmName: string
+  performance: Performance
+  path: Node[]
+  timestamp: Date
+}
+
 export interface AlgorithmConfig {
   [key: string]: unknown
 }

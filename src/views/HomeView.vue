@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import NodeCanvas from '../components/NodeCanvas.vue'
 import PerformanceStats from '../components/PerformanceStats.vue'
+import Leaderboard from '../components/Leaderboard.vue'
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import type { AlgorithmConfig, Edge, Graph, Node } from '../types/tsp'
-import { algorithmRunner, AlgorithmRunnerError } from '../services/algorithmRunner'
+import type { AlgorithmConfig, Edge, Graph, Node, LeaderboardEntry } from '../types/tsp'
+import { algorithmRunner, AlgorithmRunnerError, createAlgorithmRunner } from '../services/algorithmRunner'
+import { getAlgorithmNames } from '../algorithms'
 
 const selectedAlgorithmName = ref<string>('')
 const algorithmConfig = ref<AlgorithmConfig>({})
@@ -13,7 +15,19 @@ const runtime = ref<number | undefined>(undefined)
 const reads = ref<number | undefined>(undefined)
 const writes = ref<number | undefined>(undefined)
 
+const leaderboardEntries = ref<LeaderboardEntry[]>([])
+let leaderboardIdCounter = 0
+const selectedEntryId = ref<number | null>(null)
+
+// Parallel run state
+type AlgorithmRunner = {
+  cancel: () => void
+}
+const parallelRunners = ref<Map<string, AlgorithmRunner>>(new Map())
+const runningAlgorithms = ref<Set<string>>(new Set())
+
 const isRunning = computed(() => algorithmRunner.state.value.isRunning)
+const isAnyRunning = computed(() => isRunning.value || runningAlgorithms.value.size > 0)
 const runnerError = computed(() => algorithmRunner.state.value.error)
 
 const graph = ref<Graph>({
@@ -58,10 +72,8 @@ onUnmounted(() => {
   if (resizeObserver) {
     resizeObserver.disconnect()
   }
-  // Cancel any running algorithm when component unmounts
-  if (algorithmRunner.state.value.isRunning) {
-    algorithmRunner.cancel()
-  }
+  // Cancel any running algorithms when component unmounts
+  cancelAllAlgorithms()
 })
 
 const resetPerformanceStats = () => {
@@ -70,6 +82,11 @@ const resetPerformanceStats = () => {
   reads.value = undefined
   writes.value = undefined
   algorithmRunner.clearError()
+}
+
+const clearLeaderboard = () => {
+  leaderboardEntries.value = []
+  leaderboardIdCounter = 0
 }
 
 const generateRandomGraph = () => {
@@ -87,12 +104,14 @@ const generateRandomGraph = () => {
   graph.value.nodes = nodes
   graph.value.edges = []
   resetPerformanceStats()
+  clearLeaderboard()
 }
 
 const clearGraph = () => {
   graph.value.nodes = []
   graph.value.edges = []
   resetPerformanceStats()
+  clearLeaderboard()
 }
 
 const onAlgorithmSelected = (key: string, _algorithm: { name: string }) => {
@@ -154,6 +173,16 @@ const runAlgorithm = async () => {
     reads.value = result.performance.reads
     writes.value = result.performance.writes
 
+    const entryId = ++leaderboardIdCounter
+    leaderboardEntries.value.push({
+      id: entryId,
+      algorithmName: selectedAlgorithmName.value,
+      performance: { ...result.performance },
+      path: [...result.path],
+      timestamp: new Date(),
+    })
+    selectedEntryId.value = entryId
+
     const edges: Edge[] = []
     for (let i = 0; i < result.path.length; i++) {
       const current = result.path[i]
@@ -182,11 +211,85 @@ const runAlgorithm = async () => {
 const cancelAlgorithm = () => {
   algorithmRunner.cancel()
 }
+
+const runAllAlgorithms = async () => {
+  if (graph.value.nodes.length === 0) return
+
+  const algorithmNames = getAlgorithmNames()
+  const timeoutMs = timeout.value > 0 ? timeout.value : undefined
+
+  cancelAllAlgorithms()
+
+  for (const algorithmName of algorithmNames) {
+    const runner = createAlgorithmRunner()
+    parallelRunners.value.set(algorithmName, runner)
+    runningAlgorithms.value.add(algorithmName)
+
+    runner
+      .run(algorithmName, graph.value, {}, { timeout: timeoutMs })
+      .then((result) => {
+        const entryId = ++leaderboardIdCounter
+        leaderboardEntries.value.push({
+          id: entryId,
+          algorithmName,
+          performance: { ...result.performance },
+          path: [...result.path],
+          timestamp: new Date(),
+        })
+
+        if (selectedEntryId.value === null) {
+          handleEntrySelected(leaderboardEntries.value[leaderboardEntries.value.length - 1]!)
+        }
+      })
+      .catch((err) => {
+        if (err instanceof AlgorithmRunnerError && err.code === 'CANCELLED') {
+          // User cancelled, ignore
+          return
+        }
+        console.error(`Algorithm ${algorithmName} failed:`, err)
+      })
+      .finally(() => {
+        runningAlgorithms.value.delete(algorithmName)
+        parallelRunners.value.delete(algorithmName)
+      })
+  }
+}
+
+const cancelAllAlgorithms = () => {
+  // Cancel the main runner
+  algorithmRunner.cancel()
+
+  // Cancel all parallel runners
+  for (const [, runner] of parallelRunners.value) {
+    runner.cancel()
+  }
+  parallelRunners.value.clear()
+  runningAlgorithms.value.clear()
+}
+
+const handleEntrySelected = (entry: LeaderboardEntry) => {
+  selectedEntryId.value = entry.id
+
+  bestDistance.value = entry.performance.distance
+  runtime.value = entry.performance.runtime
+  reads.value = entry.performance.reads
+  writes.value = entry.performance.writes
+
+  const edges: Edge[] = []
+  for (let i = 0; i < entry.path.length; i++) {
+    const current = entry.path[i]
+    const next = entry.path[i + 1]
+    if (current && next) {
+      edges.push({ id: i, from: current, to: next })
+    }
+  }
+  graph.value.edges = edges
+}
 </script>
 
 <template>
   <main>
-    <div class="mb-4 flex gap-2 items-end">
+    <div class="mb-4 flex gap-2 items-end flex-wrap">
       <label class="input">
         <span class="label">Number of nodes</span>
         <input
@@ -194,14 +297,28 @@ const cancelAlgorithm = () => {
           type="number"
           min="1"
           max="5000"
-          :disabled="isRunning"
+          :disabled="isAnyRunning"
         />
       </label>
-      <button class="btn btn-primary" :disabled="isRunning" @click="generateRandomGraph">
+      <button class="btn btn-primary" :disabled="isAnyRunning" @click="generateRandomGraph">
         Generate random graph with N nodes
       </button>
-      <button class="btn btn-error" :disabled="isRunning" @click="clearGraph">
+      <button class="btn btn-error" :disabled="isAnyRunning" @click="clearGraph">
         Clear graph
+      </button>
+      <button
+        class="btn btn-secondary"
+        :disabled="isAnyRunning || graph.nodes.length === 0"
+        @click="runAllAlgorithms"
+      >
+        Run All Algorithms
+      </button>
+      <button
+        v-if="isAnyRunning"
+        class="btn btn-error"
+        @click="cancelAllAlgorithms"
+      >
+        Cancel All ({{ runningAlgorithms.size + (isRunning ? 1 : 0) }} running)
       </button>
     </div>
     <div class="grid grid-cols-12 gap-4">
@@ -220,13 +337,19 @@ const cancelAlgorithm = () => {
           :runtime="runtime"
           :reads="reads"
           :writes="writes"
-          :is-running="isRunning"
+          :is-running="isAnyRunning"
           :error="runnerError"
           @algorithm-selected="onAlgorithmSelected"
           @config-changed="onConfigChanged"
           @timeout-changed="onTimeoutChanged"
           @run-algorithm="runAlgorithm"
           @cancel-algorithm="cancelAlgorithm"
+        />
+        <Leaderboard
+          :entries="leaderboardEntries"
+          :selected-entry-id="selectedEntryId"
+          :is-running="isAnyRunning"
+          @select-entry="handleEntrySelected"
         />
       </div>
     </div>

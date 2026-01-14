@@ -4,6 +4,7 @@ import nearestNeighbour from './nearest-neighbour'
 import genetic from './genetic'
 import antColony from './ant-colony'
 import simulatedAnnealing from './simulated-annealing'
+import grasp from './grasp'
 import type { Algorithm } from '../types/tsp'
 
 // algorithm registry
@@ -14,6 +15,7 @@ const algorithms: Record<string, Algorithm> = {
   genetic,
   antColony,
   simulatedAnnealing,
+  grasp,
 }
 
 export const getAlgorithmNames = (): string[] => {

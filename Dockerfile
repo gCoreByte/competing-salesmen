@@ -3,10 +3,10 @@
 
     WORKDIR /app
     COPY package*.json ./
-    RUN bun install
+    RUN npm install
     
     COPY . .
-    RUN bun run build
+    RUN npm run build
     
     # ---- production stage ----
     FROM nginx:alpine
